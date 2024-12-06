@@ -1,0 +1,93 @@
+import paramiko
+import time
+
+# Define variables
+ssh_ip_address = '192.168.56.101'
+ssh_username = 'prne'
+ssh_password = 'cisco123!'
+ssh_password_enable = 'class123!'
+ssh_new_hostname = 'R1'
+
+# Configuration commands
+loopback_ip = "10.10.10.23"
+loopback_mask = "255.255.255.255"
+ospf_area = "0"
+interface_ip = "192.168.56.101"
+interface_mask = "255.255.255.0"
+interface_name = "GigabitEthernet1"
+
+def send_command(session, command, expect="#", delay=1):
+    session.send(command + "\n")
+    time.sleep(delay)
+    output = session.recv(65535).decode("utf-8")
+    if expect not in output:
+        print(f"[!] Warning: Expected prompt not found after command '{command}'")
+    return output
+
+def configure_router():
+    try:
+        # Establish an SSH connection
+        print("[*] Establishing SSH connection...")
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(ssh_ip_address, username=ssh_username, password=ssh_password, timeout=10)
+        print("[+] Connected to the router.")
+
+        # Start an interactive shell session
+        session = client.invoke_shell()
+        session.recv(65535)  # Clear the buffer
+
+        # Enter enable mode
+        print("[*] Entering enable mode...")
+        send_command(session, "enable", expect="Password:")
+        send_command(session, ssh_password_enable)
+        print("[+] Entered enable mode.")
+
+        # Enter configuration mode
+        print("[*] Entering global configuration mode...")
+        send_command(session, "configure terminal")
+
+        # Change hostname
+        print(f"[*] Changing hostname to {ssh_new_hostname}...")
+        send_command(session, f"hostname {ssh_new_hostname}")
+
+        # Configure loopback interface
+        print("[*] Configuring loopback interface...")
+        send_command(session, "interface loopback 0")
+        send_command(session, f"ip address {loopback_ip} {loopback_mask}")
+        send_command(session, "no shutdown")
+
+        # Configure another interface
+        print(f"[*] Configuring {interface_name}...")
+        send_command(session, f"interface {interface_name}")
+        send_command(session, f"ip address {interface_ip} {interface_mask}")
+        send_command(session, "no shutdown")
+
+        # Configure OSPF
+        print("[*] Configuring OSPF...")
+        send_command(session, "router ospf 1")
+        send_command(session, f"network {loopback_ip} 0.0.0.0 area {ospf_area}")
+        send_command(session, f"network {interface_ip} 0.0.0.255 area {ospf_area}")
+
+        # Save configuration
+        print("[*] Saving configuration...")
+        send_command(session, "write memory")
+
+        # Verify OSPF configuration
+        print("[*] Displaying OSPF configuration...")
+        ospf_output = send_command(session, "show ip ospf", expect="#")
+        print("[+] OSPF Configuration:")
+        print(ospf_output)
+
+        # Close the session
+        session.close()
+        client.close()
+        print("[+] Configuration completed successfully.")
+
+    except paramiko.SSHException as e:
+        print(f"[!] SSH Error: {e}")
+    except Exception as e:
+        print(f"[!] Error: {e}")
+
+if __name__ == "__main__":
+    configure_router()
