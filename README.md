@@ -1,12 +1,10 @@
 import paramiko
 import time
 
-# Router and topology details
 router_ip = "192.168.56.101"  # Router management IP address
 username = "admin"            # Replace with your router username
 password = "password"         # Replace with your router password
 
-# Configuration commands for loopback, GigabitEthernet1, and OSPF
 config_commands = [
     "configure terminal",
     # Configure Loopback interface
@@ -87,5 +85,4 @@ def configure_router(router_ip, username, password, commands):
         if 'ssh' in locals():
             ssh.close()
 
-# Run the configuration function
 configure_router(router_ip, username, password, config_commands)
