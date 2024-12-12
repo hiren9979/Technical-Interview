@@ -98,20 +98,18 @@ def setup_router():
         print("[+] OSPF configured.")
 
         # Save the configuration
-    print("[*] Saving current configuration...")
-    session.sendline("write memory")
-    result = session.expect([rf"{hostname}#", "Building configuration", pexpect.TIMEOUT, pexpect.EOF], timeout=10)
+        print("[*] Saving current configuration...")
+        session.sendline("write memory")
+        result = session.expect([rf"{hostname}#", "Building configuration", pexpect.TIMEOUT, pexpect.EOF], timeout=10)
 
-    if result == 0:
-        print("[+] Configuration saved successfully.")
-    elif result == 1:
-        # Handle the "Building configuration..." output
-         session.expect([rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF])
-        print("[+] Configuration saved successfully after confirmation.")
-    else:
-        print("[!] Failed to save configuration.")
-        print(f"[DEBUG] Router response: {session.before.strip()}")
-
+        if result == 0:
+            print("[+] Configuration saved successfully.")
+        elif result == 1:
+            session.expect([rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF])
+            print("[+] Configuration saved successfully after confirmation.")
+        else:
+            print("[!] Failed to save configuration.")
+            print(f"[DEBUG] Router response: {session.before.strip()}")
 
         # Verify OSPF settings
         print("[*] Verifying OSPF configuration...")
