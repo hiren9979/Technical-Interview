@@ -1,0 +1,22 @@
+# Verify OSPF settings
+print("[*] Verifying OSPF configuration...")
+ospf_output = ""
+try:
+    while True:
+        result = session.expect([r'--More--', rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF], timeout=10)
+        ospf_output += session.before.strip()  # Append current output
+        if result == 0:  # If '--More--' is detected, send space to get the next page
+            session.send(" ")
+        elif result == 1:  # If the command completes and the prompt is returned
+            break
+except pexpect.TIMEOUT:
+    print("[!] Timeout: Unable to verify OSPF configuration. Check router response.")
+    print("[DEBUG] Response:", session.before.strip())
+    return
+except Exception as error:
+    print(f"[!] General Error: {error}")
+    return
+
+# Print OSPF details
+print("[+] OSPF Details:")
+print(ospf_output)
