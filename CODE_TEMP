@@ -1,22 +1,140 @@
-# Verify OSPF settings
-print("[*] Verifying OSPF configuration...")
-ospf_output = ""
-try:
-    while True:
-        result = session.expect([r'--More--', rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF], timeout=10)
-        ospf_output += session.before.strip()  # Append current output
-        if result == 0:  # If '--More--' is detected, send space to get the next page
-            session.send(" ")
-        elif result == 1:  # If the command completes and the prompt is returned
-            break
-except pexpect.TIMEOUT:
-    print("[!] Timeout: Unable to verify OSPF configuration. Check router response.")
-    print("[DEBUG] Response:", session.before.strip())
-    return
-except Exception as error:
-    print(f"[!] General Error: {error}")
-    return
+import pexpect
+import time
 
-# Print OSPF details
-print("[+] OSPF Details:")
-print(ospf_output)
+# Define variables
+router_ip = '192.168.56.101'
+username = 'prne'
+password = 'cisco123!'
+enable_password = 'class123!'
+hostname = 'Router1'
+
+# Configuration commands
+loopback_address = "10.10.10.23"
+loopback_subnet = "255.255.255.255"
+ospf_area_id = "0"
+main_interface_ip = "192.168.56.101"
+main_interface_subnet = "255.255.255.0"
+main_interface_name = "GigabitEthernet1"
+
+def setup_router():
+    try:
+        # Establish an SSH connection
+        print("[*] Connecting to the router...")
+        session = pexpect.spawn(f"ssh -o StrictHostKeyChecking=no {username}@{router_ip}", timeout=20, encoding="utf-8")
+        session.logfile = open("ssh_debug.log", "w")  # Enable logging for debugging
+
+        # Login to the router
+        session.expect("Password:")
+        session.sendline(password)
+        result = session.expect([">", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Login failed or timed out.")
+            return
+        print("[+] Connected to the router.")
+
+        # Enter enable mode
+        print("[*] Switching to enable mode...")
+        session.sendline("enable")
+        session.expect("Password:")
+        session.sendline(enable_password)
+        result = session.expect([r"#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to enter enable mode.")
+            return
+        print("[+] Enable mode activated.")
+
+        # Enter configuration mode
+        print("[*] Entering configuration mode...")
+        session.sendline("configure terminal")
+        result = session.expect([r"\(config\)#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to enter configuration mode.")
+            return
+        print("[+] Configuration mode entered.")
+
+        # Update hostname
+        print(f"[*] Setting hostname to {hostname}...")
+        session.sendline(f"hostname {hostname}")
+        result = session.expect([rf"{hostname}\(config\)#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to set hostname.")
+            return
+        print("[+] Hostname updated.")
+
+        # Configure loopback interface
+        print("[*] Configuring loopback interface...")
+        session.sendline("interface loopback 0")
+        result = session.expect([rf"{hostname}\(config-if\)#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to enter loopback interface configuration.")
+            return
+        session.sendline(f"ip address {loopback_address} {loopback_subnet}")
+        session.expect([rf"{hostname}\(config-if\)#"])
+        session.sendline("no shutdown")
+        session.expect([rf"{hostname}\(config-if\)#"])
+        print("[+] Loopback interface configured.")
+
+        # Configure primary interface
+        print(f"[*] Configuring {main_interface_name}...")
+        session.sendline(f"interface {main_interface_name}")
+        session.expect([rf"{hostname}\(config-if\)#"])
+        session.sendline(f"ip address {main_interface_ip} {main_interface_subnet}")
+        session.expect([rf"{hostname}\(config-if\)#"])
+        session.sendline("no shutdown")
+        session.expect([rf"{hostname}\(config-if\)#"])
+        print("[+] Primary interface configured.")
+
+        # Configure OSPF
+        print("[*] Configuring OSPF...")
+        session.sendline("router ospf 1")
+        result = session.expect([rf"{hostname}\(config-router\)#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to enter OSPF configuration.")
+            return
+        session.sendline(f"network {loopback_address} 0.0.0.0 area {ospf_area_id}")
+        session.expect([rf"{hostname}\(config-router\)#"])
+        session.sendline(f"network {main_interface_ip} 0.0.0.255 area {ospf_area_id}")
+        session.expect([rf"{hostname}\(config-router\)#"])
+        print("[+] OSPF configured.")
+
+        # Save the configuration
+        print("[*] Saving current configuration...")
+        session.sendline("write memory")
+        result = session.expect([rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF])
+        if result != 0:
+            print("[!] Failed to save configuration.")
+            return
+        print("[+] Configuration saved.")
+
+        # Verify OSPF settings
+        print("[*] Verifying OSPF configuration...")
+        session.sendline("show ip ospf")
+        ospf_output = ""
+        while True:
+            try:
+                result = session.expect(["--More--", rf"{hostname}#", pexpect.TIMEOUT, pexpect.EOF], timeout=30)
+                ospf_output += session.before.strip()
+                if result == 0:
+                    session.send(" ")
+                elif result == 1:
+                    break
+            except pexpect.TIMEOUT:
+                print("[!] Timeout during OSPF verification.")
+                break
+        print("[+] OSPF Details:")
+        print(ospf_output)
+
+        # Close session
+        session.sendline("exit")
+        session.close()
+        print("[+] Setup completed successfully.")
+
+    except pexpect.exceptions.TIMEOUT:
+        print("[!] Operation timed out.")
+    except pexpect.exceptions.EOF:
+        print("[!] Unexpected EOF encountered.")
+    except Exception as error:
+        print(f"[!] General Error: {error}")
+
+if __name__ == "__main__":
+    setup_router()
